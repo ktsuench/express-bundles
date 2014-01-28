@@ -7,7 +7,30 @@ cleanCss = require('clean-css'),
 uglifyJs = require('uglify-js');
 
 exports.middleware = function(options) {
-  var bundles = {}
+  var bundles = {};
+
+  var emit = function(name) {
+    // emit bundled file
+    return [
+      name
+    ];
+  };
+
+  if (options.env === 'development'){
+    emit = function(name) {
+      // emit each file in bundle
+      return bundles[name].files.map(function(file) {
+        return file.name;
+      });
+    };
+  }
+
+  if (options.attachTo){
+    options.attachTo.bundles = {};
+    options.attachTo.bundles.emit = emit;
+  }
+
+
   options.hooks = options.hooks ? options.hooks : {};
   Object.keys(options.bundles).forEach(function(name) {
     var files = options.bundles[name].map(function(name) {
@@ -197,47 +220,29 @@ exports.middleware = function(options) {
       ast.mangle_names()
       data = ast.print_to_string({
         comments: /^\/*!/
-      })
-      fs.writeFile(path.join(options.src, name), data, done)
-      break
+      });
+      fs.writeFile(path.join(options.src, name), data, done);
+      break;
     }
   }
 
   return function(req, res, next) {
 
-    res.locals.bundles = {}
-
-    switch(options.env) {
-    case 'development':
-      res.locals.bundles.emit = function(name) {
-
-        // emit each file in bundle
-        return bundles[name].files.map(function(file) {
-          return file.name
-        })
-      }
-      break
-
-    default:
-      res.locals.bundles.emit = function(name) {
-        // emit bundled file
-        return [
-          name
-        ]
-      }
-      break
+    if (!options.attachTo) {
+      res.locals.bundles = {};
+      res.locals.bundles.emit = emit;
     }
 
     var bundle = bundles[path.relative('/', req.url)];
 
     if(!bundle) {
       // not a bundle, skip it
-      next()
-      return
+      next();
+      return;
     }
 
     build(bundle, function(err) {
-      next(err)
+      next(err);
     })
   }
 }
