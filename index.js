@@ -1,23 +1,60 @@
-var async = require('async')
-  , fs = require('fs')
-  , path = require('path')
-  , cleanCss = require('clean-css')
-  , uglifyJs = require('uglify-js')
+var
+async = require('async'),
+fs = require('fs'),
+path = require('path'),
+request = require('request'),
+cleanCss = require('clean-css'),
+uglifyJs = require('uglify-js');
 
 exports.middleware = function(options) {
   var bundles = {}
+  options.hooks = options.hooks ? options.hooks : {};
   Object.keys(options.bundles).forEach(function(name) {
+    var files = options.bundles[name].map(function(name) {
+      var file = {
+        name: name
+      };
+      if (/^https?\:/.test(name)){
+        file.path = name;
+        file.getModifiedTime = false;
+        file.read = function(done){
+          var request = require('request');
+
+          request.get(this.path, {}, function (error, response, body) {
+            if (response.statusCode === 200) {
+              if (error) {
+                return done(error);
+              };
+              done(null, body);
+            }
+            else {
+              return done(error);
+            }
+          });
+        };
+      }
+      else {
+        file.path = path.join(options.src, name);
+        file.getModifiedTime = function(){
+          return fs.statSync(this.path).mtime;
+        }
+        file.read = function(done){
+          fs.readFile(this.path, {
+            encoding: 'utf8'
+          }, function(err, data){
+            done(err, data);
+          });
+        };
+      }
+
+      return file;
+    });
     bundles[name] = {
       name: name,
       path: path.join(options.src, name),
-      files: options.bundles[name].map(function(name) {
-        return {
-          name: name,
-          path: path.join(options.src, name)
-        }
-      })
+      files: files
     }
-  })
+  });
 
   // Checks if any file under @bundle has changed
   function check(bundle, done) {
@@ -32,31 +69,28 @@ exports.middleware = function(options) {
       }
 
       // Compare mtime
-      fs.stat(file.path, function(err, stats) {
-        if(err) {
-          done(true)
-          return
-        }
-
-        // Store mtime in a temporary property
-        file.ttime = stats.mtime
-        done(!file.mtime || stats.mtime - file.mtime)
-      })
-
+      if (file.getModifiedTime){
+        file.ttime = file.getModifiedTime();
+        done(!file.mtime || file.ttime - file.mtime);
+      }
+      else{
+        done(null, false);
+      }
     }, function(changed) {
       done(null, changed)
-    })
+    });
   }
 
   function build(bundle, done) {
     // check bundle for change
     check(bundle, function(err, changed) {
+
       if(err) {
         done(err)
         return
       }
 
-      if(!changed) {
+      if(!changed && fs.existsSync(bundle.path)) {
         // @bundle hasn't changed, rebuild unnecessary
         done()
         return
@@ -69,8 +103,8 @@ exports.middleware = function(options) {
           // @file is a bundle, build it
           build(bundle, function(err, data) {
             if(err) {
-              done(err)
-              return
+              done(err);
+              return;
             }
 
             // read file, add to memo
@@ -78,40 +112,39 @@ exports.middleware = function(options) {
               encoding: 'utf8'
             }, function(err, data) {
               if(err) {
-                done(err)
-                return
+                done(err);
+                return;
               }
-              done(null, data)
+              done(null, data);
             })
-          })
-          return
+          });
+          return;
         }
 
-        // read file, run it through hook if defined
-        fs.readFile(file.path, {
-          encoding: 'utf8'
-        }, function(err, data) {
-          if(err) {
-            done(err)
-            return
+        file.read(function(err, data) {
+          if (err) {
+            done(err);
+            return;
           }
 
           var ext = path.extname(file.name)
+
           var hook = options.hooks[ext]
           if(hook) {
             // hook defined, use it
             hook(file, data, function(err, data) {
-              if(err) {
-                done(err)
-                return
+              if (err) {
+                console.log(err);
+                done(err);
+                return;
               }
-              done(null, data)
-            })
+              done(null, data);
+            });
             return;
           }
 
           done(null, data)
-        })
+        });
       }, function(err, results) {
         if(err) {
           done(err)
@@ -139,13 +172,17 @@ exports.middleware = function(options) {
     switch(path.extname(name)) {
     case '.css':
       // minify css
-      data = cleanCss.process(data.join('\n'))
-      fs.writeFile(path.join(options.src, name), data, done)
-      break
+      data = cleanCss.process(data.join('\n'));
+      fs.writeFile(path.join(options.src, name), data, done);
+      break;
+
+    case '.html':
+      fs.writeFile(path.join(options.src, name), data.join("\n"), done);
+      break;
 
     case '.js':
       // mangle and minify js
-      var ast = null
+      var ast = null;
       data.forEach(function(code) {
         ast = uglifyJs.parse(code, {
           toplevel: ast
@@ -167,18 +204,20 @@ exports.middleware = function(options) {
   }
 
   return function(req, res, next) {
+
     res.locals.bundles = {}
 
     switch(options.env) {
     case 'development':
       res.locals.bundles.emit = function(name) {
+
         // emit each file in bundle
         return bundles[name].files.map(function(file) {
           return file.name
         })
       }
       break
-    
+
     default:
       res.locals.bundles.emit = function(name) {
         // emit bundled file
@@ -189,7 +228,8 @@ exports.middleware = function(options) {
       break
     }
 
-    var bundle = bundles[path.relative('/', req.url)]
+    var bundle = bundles[path.relative('/', req.url)];
+
     if(!bundle) {
       // not a bundle, skip it
       next()
