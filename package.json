@@ -17,6 +17,7 @@
   "dependencies": {
     "async": "~0.2.6",
     "clean-css": "~0.10.2",
-    "uglify-js": "~2.2.5"
+    "uglify-js": "~2.2.5",
+    "request": "~2.33.0"
   }
 }
