@@ -45,7 +45,7 @@ exports.middleware = function(options) {
 
         if (filePattern.length > 1) {
           dirFiles = dirFiles.filter(function(filename) {
-            return path.basename(filename).match(new RegExp(filePattern.replace(".","\.").replace("*", ".*")));
+            return path.basename(filename).match(new RegExp(filePattern));
           });
         }
       }
