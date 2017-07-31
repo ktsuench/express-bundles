@@ -152,7 +152,7 @@ exports.middleware = function(options) {
 
           var ext = path.extname(file.name)
 
-          var hook = options.hooks[ext]
+          var hook = options.hasOwnProperty("hooks") ? options.hooks[ext] : null
           if(hook) {
             // hook defined, use it
             hook(file, data, function(err, data) {
