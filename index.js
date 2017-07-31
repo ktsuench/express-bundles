@@ -233,8 +233,42 @@ exports.middleware = function(options) {
 
     case '.js':
       // mangle and minify js
-      var ast = uglifyJs.minify(data)
-      fs.writeFile(path.join(options.src, name), data, done);
+      var uglifyOptions = {
+        compress: {
+          booleans: true,
+          cascade: true,
+          comparisons: true,
+          conditionals: true,
+          join_vars: true,
+          loops: true,
+          passes: 2,
+          properties: true,
+          sequences : true,
+          reduce_vars: true,
+          typeofs: true,
+          unused: true
+        },
+        mangle: {
+          toplevel: false,
+          keep_fnames: false
+        },
+        output: {
+          beautify: false,
+          comments: false,
+          preserve_line: false,
+          semicolons: true
+        }
+      }
+      var results = uglifyJs.minify(data, uglifyOptions);
+
+      if (results.error){ 
+        console.log(results.error);
+        done(results.error, null);
+      } else {
+        if (results.warning) console.log(results.warning);
+
+        fs.writeFile(path.join(options.src, name), results.code , done);
+      }
       break;
     }
   }
