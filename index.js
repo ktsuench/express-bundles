@@ -33,12 +33,40 @@ exports.middleware = function(options) {
 
   options.hooks = options.hooks ? options.hooks : {};
   Object.keys(options.bundles).forEach(function(name) {
-    var files = options.bundles[name].map(function(name) {
+    var outputPath = path.join(options.src, name);
+    var fileList = [];
+
+    options.bundles[name].forEach(function(pattern) {
+      var filePattern = path.basename(path.join(options.src, pattern));
+      var dirFiles;
+
+      if (filePattern.indexOf("*") > -1) {
+        dirFiles = fs.readdirSync(path.dirname(path.join(options.src, pattern)));
+
+        if (filePattern.length > 1) {
+          dirFiles = dirFiles.filter(function(filename) {
+            return path.basename(filename).match(new RegExp(filePattern.replace(".","\.").replace("*", ".*")));
+          });
+        }
+      }
+
+      if (dirFiles) {
+        fileList = fileList.concat(dirFiles.map(function(file) {
+          return path.join(path.dirname(pattern), file);
+        }));
+      } else {
+        fileList.push(pattern);
+      }
+    });
+
+    if (fileList.length == 0) fileList = options.bundles[name];
+
+    var files = fileList.map(function(filename) {
       var file = {
-        name: name
+        name: filename
       };
-      if (/^https?\:/.test(name)){
-        file.path = name;
+      if (/^https?\:/.test(filename)){
+        file.path = filename;
         file.getModifiedTime = false;
         file.read = function(done){
           var request = require('request');
@@ -57,7 +85,7 @@ exports.middleware = function(options) {
         };
       }
       else {
-        file.path = path.join(options.src, name);
+        file.path = path.join(options.src, filename);
         file.getModifiedTime = function(){
           return fs.statSync(this.path).mtime;
         }
@@ -74,7 +102,7 @@ exports.middleware = function(options) {
     });
     bundles[name] = {
       name: name,
-      path: path.join(options.src, name),
+      path: outputPath,
       files: files
     }
   });
