@@ -233,7 +233,7 @@ exports.middleware = function(options) {
       res.locals.bundles.emit = emit;
     }
 
-    var bundle = bundles[path.relative('/', req.url)];
+    var bundle = bundles[path.relative('/', req.url)] || bundles[path.relative('/', req.url).replace("\\","/")];
 
     if(!bundle) {
       // not a bundle, skip it
