@@ -233,22 +233,7 @@ exports.middleware = function(options) {
 
     case '.js':
       // mangle and minify js
-      var ast = null;
-      data.forEach(function(code) {
-        ast = uglifyJs.parse(code, {
-          toplevel: ast
-        })
-      })
-      ast.figure_out_scope()
-      ast = ast.transform(uglifyJs.Compressor({
-        warnings: false
-      }))
-      ast.figure_out_scope()
-      ast.compute_char_frequency()
-      ast.mangle_names()
-      data = ast.print_to_string({
-        comments: /^\/*!/
-      });
+      var ast = uglifyJs.minify(data)
       fs.writeFile(path.join(options.src, name), data, done);
       break;
     }
